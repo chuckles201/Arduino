@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .controls {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left . right"
+                ". down .";
+            gap: 10px;
+            margin: 20px;
+        }
+        button {
+            padding: 15px 25px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.1s;
+            user-select: none;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .direction-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .direction-btn:hover {
+            background-color: #45a049;
+        }
+        .direction-btn.active {
+            background-color: #45a049;
+            transform: scale(0.98);
+        }
+        .up { grid-area: up; }
+        .down { grid-area: down; }
+        .left { grid-area: left; }
+        .right { grid-area: right; }
+        .laser-btn {
+            background-color: #ff4444;
+            color: white;
+            margin-top: 20px;
+            width: 200px;
+        }
+        .laser-btn:hover {
+            background-color: #cc0000;
+        }
+        .laser-btn.active {
+            background-color: #cc0000;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Control Panel</h1>
+        
+        <div class="controls">
+            <button class="direction-btn up" data-direction="0">Up</button>
+            <button class="direction-btn down" data-direction="1">Down</button>
+            <button class="direction-btn left" data-direction="2">Left</button>
+            <button class="direction-btn right" data-direction="3">Right</button>
+        </div>
+
+        <button class="laser-btn" data-action="4">Toggle Laser</button>
+        
+        <div id="status">Status: Ready</div>
+    </div>
+
+    <script>
+        let activeIntervals = {};
+        const status = document.getElementById('status');
+
+        async function sendCommand(data) {
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams(data)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                status.textContent = `Status: Sent command: ${JSON.stringify(data)}`;
+            } catch (error) {
+                status.textContent = `Status: Error sending command: ${error.message}`;
+            }
+        }
+
+        // Handle directional buttons
+        document.querySelectorAll('.direction-btn').forEach(button => {
+            button.addEventListener('mousedown', (e) => {
+                const direction = e.target.dataset.direction;
+                button.classList.add('active');
+                
+                // Send initial command
+                sendCommand({ direction: direction });
+                
+                // Set up interval for continuous sending
+                activeIntervals[direction] = setInterval(() => {
+                    sendCommand({ direction: direction });
+                }, 40); // Sends every 100ms while held
+            });
+
+            button.addEventListener('mouseup', (e) => {
+                const direction = e.target.dataset.direction;
+                button.classList.remove('active');
+                clearInterval(activeIntervals[direction]);
+            });
+
+            button.addEventListener('mouseleave', (e) => {
+                const direction = e.target.dataset.direction;
+                button.classList.remove('active');
+                clearInterval(activeIntervals[direction]);
+            });
+
+            // Touch support for mobile devices
+            button.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const direction = e.target.dataset.direction;
+                button.classList.add('active');
+                
+                sendCommand({ direction: direction });
+                
+                activeIntervals[direction] = setInterval(() => {
+                    sendCommand({ direction: direction });
+                }, 100);
+            });
+
+            button.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                const direction = e.target.dataset.direction;
+                button.classList.remove('active');
+                clearInterval(activeIntervals[direction]);
+            });
+        });
+
+        // Handle laser button
+        const laserBtn = document.querySelector('.laser-btn');
+        laserBtn.addEventListener('click', () => {
+            laserBtn.classList.toggle('active');
+            sendCommand({ laser: 't' });
+        });
+    </script>
+</body>
+</html>

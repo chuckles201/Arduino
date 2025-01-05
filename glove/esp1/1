@@ -1,0 +1,156 @@
+// SENDER BOARD
+
+// MPU 6050 with ESP
+// D22 and 21 are SDL and SCA
+
+#include <Wire.h>
+
+const int MPU_addr = 0x68; // adress for i2c
+
+long loop_timer;
+
+// accelerator and gyroscope values
+struct MPUData {
+  float AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+    
+  // Operator overloading for adding two MPUData structs
+  // return this struct with this and other...
+  MPUData operator+(MPUData other) const{
+      MPUData result;
+      result.AcX = this->AcX + other.AcX;
+      result.AcY = this->AcY + other.AcY;
+      result.AcZ = this->AcZ + other.AcZ;
+      result.Tmp = this->Tmp + other.Tmp;
+      result.GyX = this->GyX + other.GyX;
+      result.GyY = this->GyY + other.GyY;
+      result.GyZ = this->GyZ + other.GyZ;
+      return result;
+  }
+
+  // for integration.
+  MPUData operator*(float scalar) const{
+      MPUData result;
+      result.AcX = this->AcX * scalar;
+      result.AcY = this->AcY * scalar;
+      result.AcZ = this->AcZ * scalar;
+      result.Tmp = this->Tmp * scalar;
+      result.GyX = this->GyX * scalar;
+      result.GyY = this->GyY * scalar;
+      result.GyZ = this->GyZ * scalar;
+      return result;
+  }
+};
+// store offsets
+float offset[7];
+
+
+// WIFi comm, esp-now!
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+
+// DONT connect to a wifi network, just init
+
+// recvr: 3c:8a:1f:0c:54:d0
+// sendr: 3c:8a:1f:0c:87:a4
+
+// write in hexadecimal
+uint8_t broadcastAddress[] = {0x3C, 0x8A, 0x1F, 0x0C, 0X54, 0XD0};
+
+// start at nothing...
+MPUData data = {0,0,0,0,0,0,0};
+
+// info about communication peer
+esp_now_peer_info_t peerInfo;
+
+
+
+void setup() {
+  pinMode(LED_BUILTIN,OUTPUT);
+
+  // start I2C protocol
+  Wire.begin();
+  // start talking to Gyro
+  Wire.beginTransmission(MPU_addr);
+  // wake up at adress
+  Wire.write(0x68);
+  Wire.write(0);
+
+  Serial.begin(115200);
+
+  //Calibrate
+  calibrate();
+
+
+  // setting up wifi mode: connect to wifi
+  WiFi.mode(WIFI_STA);
+
+  // reads MAC from esp_wifi_get_mac
+  Serial.print("MAC :"); readMacAddress();
+
+
+  // intitalize ESP
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  // Put peers mac addr in...
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  // calls when data is sent
+  esp_now_register_send_cb(OnDataSent);
+
+  //Add peer
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+    return;
+  }
+
+  loop_timer = micros();
+
+}
+
+void loop() {
+  // get data
+  MPUData change = get_integrated_pos(offset);
+
+  // copying message to be data.
+  // add amount...
+  data = data+change; // add current amount with next...
+
+
+
+  if (millis() > 4) {
+    // if next second...
+    Serial.print("Accelerometer X: "); Serial.print(data.AcX);
+    Serial.print(" | Accelerometer Y: "); Serial.print(data.AcY);
+    Serial.print(" | Accelerometer Z: "); Serial.println(data.AcZ);
+
+    Serial.print("Gyro X: "); Serial.print(data.GyX);
+    Serial.print(" | Gyro Y: "); Serial.print(data.GyY);
+    Serial.print(" | Gyro Z: "); Serial.println(data.GyZ);
+
+    Serial.print("TEMP: "); Serial.println(data.Tmp);
+
+
+    // send result: MAC_ADDR, BYTES (), size
+    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &data, sizeof(data));
+
+    if (result == ESP_OK) {
+      Serial.println("Sent with success");
+    }
+    else {
+      Serial.println("Error sending the data");
+    }
+  } 
+
+  // don't allow to be less than 4k difference...
+  while((micros() - loop_timer) < 40000);
+  loop_timer=micros();
+
+
+}

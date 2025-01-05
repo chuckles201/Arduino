@@ -1,0 +1,65 @@
+// RECVR BOARD
+
+// MPU 6050 with ESP
+// D22 and 21 are SDL and SCA
+
+#include <Wire.h>
+
+struct MPUData {
+  float AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+};
+
+
+
+
+// WIFi comm, esp-now!
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+#define WIFI_NAME "Brfox"
+#define WIFI_PASSWORD "Papa0761"
+
+// recvr: 3c:8a:1f:0c:54:d0
+// sendr: 3c:8a:1f:0c:87:a4
+
+MPUData data;
+
+// info about communication peer, stores mac,etc.
+esp_now_peer_info_t peerInfo;
+
+
+
+void setup() {
+  pinMode(LED_BUILTIN,OUTPUT);
+
+
+  Serial.begin(115200);
+
+
+  // setting up wifi mode: connect to wifi
+  WiFi.mode(WIFI_STA);
+
+  // reads MAC from esp_wifi_get_mac
+  Serial.print("MAC :"); readMacAddress();
+
+
+  // intitalize ESP
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  // receving data. register as type...
+  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRevd));
+
+  // no need for peer, will just recv!
+  digitalWrite(LED_BUILTIN,LOW);
+
+
+
+}
+int second = 0;
+void loop() {
+
+}
